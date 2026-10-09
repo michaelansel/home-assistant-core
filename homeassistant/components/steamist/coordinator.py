@@ -11,7 +11,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .udp import SteamistUDP
+from .udp import SteamistMasterStatus, SteamistUDP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -29,6 +29,7 @@ class SteamistDataUpdateCoordinator(DataUpdateCoordinator[SteamistStatus]):
     ) -> None:
         """Initialize DataUpdateCoordinator to gather data for specific steamist."""
         self.client = client
+        self.master_status: SteamistMasterStatus | None = None
         self.device_name = config_entry.data.get(CONF_NAME)  # Only found from discovery
         super().__init__(
             hass,
@@ -38,6 +39,17 @@ class SteamistDataUpdateCoordinator(DataUpdateCoordinator[SteamistStatus]):
             update_interval=timedelta(seconds=5),
             always_update=False,
         )
+
+    @override
+    async def _async_setup(self) -> None:
+        """Fetch the attached peripherals once."""
+        if not isinstance(self.client, SteamistUDP):
+            return
+        try:
+            self.master_status = await self.client.async_get_master_status()
+        except TimeoutError:
+            # stmaster needs Wi-Fi version 4.00 or greater
+            _LOGGER.debug("%s did not answer stmaster", self.client.host)
 
     @override
     async def _async_update_data(self) -> SteamistStatus:

@@ -1,4 +1,4 @@
-"""UDP protocol for Steamist controls that speak the mySteamist protocol.
+r"""UDP protocol for Steamist controls that speak the mySteamist protocol.
 
 Newer Steamist controls (e.g. 550 firmware 5.x) no longer serve the
 ``/status.xml`` web page and only talk to the mySteamist app over UDP
@@ -22,13 +22,17 @@ port 30303. The protocol is documented by Delta Faucet in the
     stb#     -> button press, no response
                 0/3 = off, 1/2 = start steam 1/2, 5/6 = start shower 1/2
 
-Example responses, from home-assistant/core#69082:
+Example responses from a 550 control (version field " 550"):
 
-    STM 550 72F0 00000-D0-CD-02-A2-8AShower    (off)
+    stdisc   STM 550 75F0 00000-D0-CA-02-A1-5BMaster Bath\x00\x00...  (off)
+    stmaster STM5 75F0 000\x01\x00\x00\x00\x00                      (steam only)
+
+and from home-assistant/core#69082:
+
     STM 550 73F1145000-D0-CD-02-A2-8AShower    (preset 1, 14:50 remaining)
 
-No ``stmaster`` response has been captured yet, so the encoding of the
-peripherals field is a best guess and the raw response is kept.
+The peripherals byte is raw, not a hex digit. The control does not answer
+the Microchip "Discovery: Who is out there?" probe, and http is refused.
 
 This module has no Home Assistant dependencies so it can move into a
 library such as aiosteamist.
@@ -166,17 +170,10 @@ def parse_status(data: bytes) -> SteamistUDPStatus:
 
 
 def _parse_peripherals(rest: str) -> Peripheral | None:
-    """Best effort decode of the peripherals field.
-
-    The documentation describes it as a bitmask without saying whether it
-    is sent as a raw byte or as a hex digit.
-    """
+    """Decode the peripherals field, which is sent as a raw byte."""
     if not rest:
         return None
-    char = rest[0]
-    if char in "0123456789abcdefABCDEF":
-        return Peripheral(int(char, 16))
-    return Peripheral(ord(char) & 0x1F)
+    return Peripheral(ord(rest[0]) & 0x1F)
 
 
 def parse_master_status(data: bytes) -> SteamistMasterStatus:

@@ -11,6 +11,7 @@ from homeassistant.components.steamist.udp import (
     Peripheral,
     SteamistUDP,
     SteamistUDPError,
+    SteamistUDPStatus,
     parse_master_status,
     parse_status,
 )
@@ -38,6 +39,23 @@ def test_parse_status(
     assert status.active is active
     assert status.mac == "00:d0:cd:02:a2:8a"
     assert status.name == "Shower"
+
+
+def test_parse_status_captured() -> None:
+    """Test a NUL padded response captured from a 550 control."""
+    status = parse_status(
+        b"STM 550 75F0 00000-D0-CA-02-A1-5BMaster Bath\x00\x00\x00\x00\x00\x00\x00"
+    )
+    assert status == SteamistUDPStatus(
+        version="550",
+        temp=75,
+        temp_units="F",
+        preset=0,
+        minutes=0,
+        seconds=0,
+        mac="00:d0:ca:02:a1:5b",
+        name="Master Bath",
+    )
 
 
 @pytest.mark.parametrize(
@@ -151,10 +169,28 @@ async def test_discover(fake_steamist: _FakeSteamist) -> None:
 @pytest.mark.parametrize(
     ("response", "peripherals", "preset", "seconds"),
     [
-        (b"STM5 72F0 000\x11ff", Peripheral.STEAM | Peripheral.SHOWER_SENSE, 0, 0),
-        (b"STM5 73F11450\x01ff", Peripheral.STEAM, 1, 890),
-        (b"STM5 73F214503ff", Peripheral.STEAM | Peripheral.AROMA_SENSE, 2, 890),
-        (b"STM5 73F11450", None, 1, 890),
+        pytest.param(
+            b"STM5 75F0 000\x01\x00\x00\x00\x00",
+            Peripheral.STEAM,
+            0,
+            0,
+            id="captured_steam_only",
+        ),
+        pytest.param(
+            b"STM5 72F0 000\x11ff",
+            Peripheral.STEAM | Peripheral.SHOWER_SENSE,
+            0,
+            0,
+            id="shower_sense",
+        ),
+        pytest.param(
+            b"STM5 73F11450\x31\x00\x00",
+            Peripheral.STEAM | Peripheral.SHOWER_SENSE,
+            1,
+            890,
+            id="digit_byte_is_not_hex",
+        ),
+        pytest.param(b"STM5 73F11450", None, 1, 890, id="no_peripherals"),
     ],
 )
 def test_parse_master_status(

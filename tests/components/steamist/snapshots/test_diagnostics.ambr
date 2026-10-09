@@ -12,7 +12,7 @@
     }),
     'raw_responses': dict({
       'stdisc': 'STM 550 72F0 00000-D0-CD-02-A2-8AShower',
-      'stmaster': 'STM5 73F1145011ff',
+      'stmaster': 'STM5 75F0 000\x01\x00\x00\x00\x00',
     }),
     'status': dict({
       'active': True,
@@ -27,14 +27,14 @@
     }),
     'stmaster': dict({
       'master_version': '5',
-      'minutes': 14,
+      'minutes': 0,
       'peripherals': list([
         'STEAM',
       ]),
-      'preset': 1,
-      'raw': 'STM5 73F1145011ff',
-      'seconds': 50,
-      'temp': 73,
+      'preset': 0,
+      'raw': 'STM5 75F0 000\x01\x00\x00\x00\x00',
+      'seconds': 0,
+      'temp': 75,
       'temp_units': 'F',
     }),
   })

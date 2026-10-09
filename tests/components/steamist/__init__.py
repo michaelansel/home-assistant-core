@@ -170,27 +170,35 @@ MOCK_UDP_STATUS_OFF = SteamistExtendedStatus(
     mac=UDP_FORMATTED_MAC_ADDRESS,
     name="Shower",
 )
-UDP_MASTER_RESPONSE = b"STM5 73F1145011ff"
+# Captured from a 550 control with only a steam generator attached
+UDP_MASTER_RESPONSE = b"STM5 75F0 000\x01\x00\x00\x00\x00"
+UDP_MASTER_RESPONSE_SHOWER = b"STM5 75F0 000\x11\x00\x00\x00\x00"
 
 
-def _mocked_steamist_udp(status: SteamistExtendedStatus) -> MagicMock:
+def _mocked_steamist_udp(
+    status: SteamistExtendedStatus, master_response: bytes | None
+) -> MagicMock:
     client = MagicMock(spec=SteamistUDP)
+    client.host = UDP_DEVICE_IP_ADDRESS
     client.async_get_status = AsyncMock(return_value=status)
     client.async_turn_on_steam = AsyncMock()
     client.async_turn_off_steam = AsyncMock()
     client.async_start_shower = AsyncMock()
-    client.async_get_master_status = AsyncMock(
-        return_value=parse_master_status(UDP_MASTER_RESPONSE)
-    )
-    client.last_responses = {
-        b"stdisc": UDP_STATUS_RESPONSE,
-        b"stmaster": UDP_MASTER_RESPONSE,
-    }
+    client.last_responses = {b"stdisc": UDP_STATUS_RESPONSE}
+    if master_response is None:
+        client.async_get_master_status = AsyncMock(side_effect=TimeoutError)
+    else:
+        client.async_get_master_status = AsyncMock(
+            return_value=parse_master_status(master_response)
+        )
+        client.last_responses[b"stmaster"] = master_response
     return client
 
 
 async def _async_setup_udp_entry(
-    hass: HomeAssistant, status: SteamistExtendedStatus
+    hass: HomeAssistant,
+    status: SteamistExtendedStatus,
+    master_response: bytes | None = UDP_MASTER_RESPONSE,
 ) -> tuple[MagicMock, MockConfigEntry]:
     """Set up a UDP-only control; use with the mock_aio_discovery fixture."""
     config_entry = MockConfigEntry(
@@ -200,7 +208,7 @@ async def _async_setup_udp_entry(
         unique_id=UDP_FORMATTED_MAC_ADDRESS,
     )
     config_entry.add_to_hass(hass)
-    client = _mocked_steamist_udp(status)
+    client = _mocked_steamist_udp(status, master_response)
     with patch("homeassistant.components.steamist.SteamistUDP", return_value=client):
         await async_setup_component(hass, steamist.DOMAIN, {steamist.DOMAIN: {}})
         await hass.async_block_till_done()

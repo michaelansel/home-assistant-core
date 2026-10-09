@@ -32,8 +32,7 @@ async def test_udp_diagnostics_no_stmaster(
     hass: HomeAssistant, hass_client: ClientSessionGenerator
 ) -> None:
     """Test diagnostics when the control does not answer stmaster."""
-    client, entry = await _async_setup_udp_entry(hass, MOCK_UDP_STATUS_PRESET_1)
-    client.async_get_master_status.side_effect = TimeoutError
+    _, entry = await _async_setup_udp_entry(hass, MOCK_UDP_STATUS_PRESET_1, None)
     result = await get_diagnostics_for_config_entry(hass, hass_client, entry)
     assert result["stmaster"] is None
 

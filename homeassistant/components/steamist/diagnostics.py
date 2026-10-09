@@ -24,14 +24,8 @@ async def async_get_config_entry_diagnostics(
     }
     client = coordinator.client
     if isinstance(client, SteamistUDP):
-        # stmaster is only answered by Wi-Fi versions 4.00 and newer, and
-        # its format has not been confirmed, so capture it here
-        master: dict[str, Any] | None
-        try:
-            master_status = await client.async_get_master_status()
-        except TimeoutError:
-            master = None
-        else:
+        master: dict[str, Any] | None = None
+        if (master_status := coordinator.master_status) is not None:
             master = asdict(master_status)
             if master_status.peripherals is not None:
                 master["peripherals"] = [

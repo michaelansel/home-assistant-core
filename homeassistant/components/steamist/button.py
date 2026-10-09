@@ -11,16 +11,13 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import DOMAIN, PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
 from .entity import SteamistEntity
-from .udp import SteamistUDP
+from .udp import Peripheral, SteamistUDP
 
-# Only useful with a ShowerSense valve attached, which cannot be detected
-# reliably yet, so these start disabled.
 SHOWER_BUTTONS: tuple[tuple[ButtonEntityDescription, int], ...] = tuple(
     (
         ButtonEntityDescription(
             key=f"shower_preset_{preset}",
             translation_key=f"shower_preset_{preset}",
-            entity_registry_enabled_default=False,
         ),
         preset,
     )
@@ -33,7 +30,7 @@ async def async_setup_entry(
     config_entry: ConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Set up the shower buttons for controls that speak UDP."""
+    """Set up the shower buttons when a ShowerSense valve is attached."""
     if config_entry.data.get(CONF_PROTOCOL) != PROTOCOL_UDP:
         return
     # Uses legacy hass.data[DOMAIN] pattern
@@ -41,6 +38,13 @@ async def async_setup_entry(
     coordinator: SteamistDataUpdateCoordinator = hass.data[DOMAIN][
         config_entry.entry_id
     ]
+    master = coordinator.master_status
+    if (
+        master is None
+        or master.peripherals is None
+        or Peripheral.SHOWER_SENSE not in master.peripherals
+    ):
+        return
     async_add_entities(
         SteamistShowerButton(coordinator, config_entry, description, preset)
         for description, preset in SHOWER_BUTTONS
