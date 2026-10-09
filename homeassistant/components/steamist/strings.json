@@ -29,6 +29,24 @@
     }
   },
   "entity": {
+    "button": {
+      "shower_preset_1": {
+        "name": "Start shower preset 1"
+      },
+      "shower_preset_2": {
+        "name": "Start shower preset 2"
+      }
+    },
+    "select": {
+      "steam_preset": {
+        "name": "Steam preset",
+        "state": {
+          "off": "[%key:common::state::off%]",
+          "preset_1": "Preset 1",
+          "preset_2": "Preset 2"
+        }
+      }
+    },
     "sensor": {
       "steam_minutes_remain": {
         "name": "Steam minutes remain"

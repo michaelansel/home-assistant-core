@@ -1,5 +1,18 @@
 {
   "entity": {
+    "button": {
+      "shower_preset_1": {
+        "default": "mdi:shower-head"
+      },
+      "shower_preset_2": {
+        "default": "mdi:shower-head"
+      }
+    },
+    "select": {
+      "steam_preset": {
+        "default": "mdi:pot-steam"
+      }
+    },
     "switch": {
       "steam_active": {
         "default": "mdi:pot-steam"

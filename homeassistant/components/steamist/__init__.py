@@ -25,7 +25,12 @@ from .discovery import (
 )
 from .udp import SteamistUDP
 
-PLATFORMS: list[str] = [Platform.SENSOR, Platform.SWITCH]
+PLATFORMS: list[str] = [
+    Platform.BUTTON,
+    Platform.SELECT,
+    Platform.SENSOR,
+    Platform.SWITCH,
+]
 DISCOVERY_INTERVAL = timedelta(minutes=15)
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 

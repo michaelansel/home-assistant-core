@@ -8,8 +8,10 @@ import pytest
 
 from homeassistant.components.steamist import udp
 from homeassistant.components.steamist.udp import (
+    Peripheral,
     SteamistUDP,
     SteamistUDPError,
+    parse_master_status,
     parse_status,
 )
 
@@ -68,6 +70,10 @@ class _FakeSteamist(asyncio.DatagramProtocol):
                 f"STM 550 72F{self.preset}{clock}00-D0-CD-02-A2-8AShower".encode(),
                 addr,
             )
+        elif data == b"stmaster":
+            assert self.transport is not None
+            clock = "1450" if self.preset else " 000"
+            self.transport.sendto(f"STM5 72F{self.preset}{clock}\x11ff".encode(), addr)
         elif data.startswith(b"stb"):
             self.preset = int(data[3:]) if data in (b"stb1", b"stb2") else 0
 
@@ -140,3 +146,54 @@ async def test_discover(fake_steamist: _FakeSteamist) -> None:
     ip, status = devices[0]
     assert ip == "127.0.0.1"
     assert status.name == "Shower"
+
+
+@pytest.mark.parametrize(
+    ("response", "peripherals", "preset", "seconds"),
+    [
+        (b"STM5 72F0 000\x11ff", Peripheral.STEAM | Peripheral.SHOWER_SENSE, 0, 0),
+        (b"STM5 73F11450\x01ff", Peripheral.STEAM, 1, 890),
+        (b"STM5 73F214503ff", Peripheral.STEAM | Peripheral.AROMA_SENSE, 2, 890),
+        (b"STM5 73F11450", None, 1, 890),
+    ],
+)
+def test_parse_master_status(
+    response: bytes, peripherals: Peripheral | None, preset: int, seconds: int
+) -> None:
+    """Test parsing stmaster responses (format not yet confirmed on hardware)."""
+    status = parse_master_status(response)
+    assert status.master_version == "5"
+    assert status.peripherals == peripherals
+    assert status.preset == preset
+    assert status.minutes * 60 + status.seconds == seconds
+    assert status.raw == response.decode("latin-1")
+
+
+@pytest.mark.parametrize(
+    "response", [b"STM 550 72F0 00000-D0-CD-02-A2-8AShower", b"STM", b"garbage"]
+)
+def test_parse_master_status_invalid(response: bytes) -> None:
+    """Test stdisc and garbage responses are not taken for stmaster."""
+    with pytest.raises(SteamistUDPError):
+        parse_master_status(response)
+
+
+async def test_client_master_and_shower(fake_steamist: _FakeSteamist) -> None:
+    """Test stmaster, shower presets and raw response capture."""
+    client = SteamistUDP("127.0.0.1", timeout=0.5)
+    assert client.host == "127.0.0.1"
+    master = await client.async_get_master_status()
+    assert master.peripherals == Peripheral.STEAM | Peripheral.SHOWER_SENSE
+    status = await client.async_get_status()
+    assert status.preset == 0
+    assert status.version == "550"
+    assert client.last_responses == {
+        b"stmaster": b"STM5 72F0 000\x11ff",
+        b"stdisc": b"STM 550 72F0 00000-D0-CD-02-A2-8AShower",
+    }
+
+    await client.async_start_shower(2)
+    await asyncio.sleep(0.05)
+    assert fake_steamist.received[-1] == b"stb6"
+    with pytest.raises(ValueError):
+        await client.async_start_shower(3)

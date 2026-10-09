@@ -8,7 +8,13 @@ from discovery30303 import AIODiscovery30303, Device30303
 
 from homeassistant.components import steamist
 from homeassistant.components.steamist.const import DOMAIN
-from homeassistant.components.steamist.udp import SteamistUDPStatus, parse_status
+from homeassistant.components.steamist.udp import (
+    SteamistExtendedStatus,
+    SteamistUDP,
+    SteamistUDPStatus,
+    parse_master_status,
+    parse_status,
+)
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -140,3 +146,63 @@ def _patch_discovery(
             yield
 
     return _patcher()
+
+
+MOCK_UDP_STATUS_PRESET_1 = SteamistExtendedStatus(
+    temp=73,
+    temp_units="F",
+    minutes_remain=15,
+    active=True,
+    preset=1,
+    seconds_remain=890,
+    version="550",
+    mac=UDP_FORMATTED_MAC_ADDRESS,
+    name="Shower",
+)
+MOCK_UDP_STATUS_OFF = SteamistExtendedStatus(
+    temp=72,
+    temp_units="F",
+    minutes_remain=0,
+    active=False,
+    preset=0,
+    seconds_remain=0,
+    version="550",
+    mac=UDP_FORMATTED_MAC_ADDRESS,
+    name="Shower",
+)
+UDP_MASTER_RESPONSE = b"STM5 73F1145011ff"
+
+
+def _mocked_steamist_udp(status: SteamistExtendedStatus) -> MagicMock:
+    client = MagicMock(spec=SteamistUDP)
+    client.async_get_status = AsyncMock(return_value=status)
+    client.async_turn_on_steam = AsyncMock()
+    client.async_turn_off_steam = AsyncMock()
+    client.async_start_shower = AsyncMock()
+    client.async_get_master_status = AsyncMock(
+        return_value=parse_master_status(UDP_MASTER_RESPONSE)
+    )
+    client.last_responses = {
+        b"stdisc": UDP_STATUS_RESPONSE,
+        b"stmaster": UDP_MASTER_RESPONSE,
+    }
+    return client
+
+
+async def _async_setup_udp_entry(
+    hass: HomeAssistant, status: SteamistExtendedStatus
+) -> tuple[MagicMock, MockConfigEntry]:
+    """Set up a UDP-only control; use with the mock_aio_discovery fixture."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Shower",
+        data=UDP_ENTRY_DATA,
+        unique_id=UDP_FORMATTED_MAC_ADDRESS,
+    )
+    config_entry.add_to_hass(hass)
+    client = _mocked_steamist_udp(status)
+    with patch("homeassistant.components.steamist.SteamistUDP", return_value=client):
+        await async_setup_component(hass, steamist.DOMAIN, {steamist.DOMAIN: {}})
+        await hass.async_block_till_done()
+    assert config_entry.state is ConfigEntryState.LOADED
+    return client, config_entry

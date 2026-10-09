@@ -11,6 +11,7 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
+from .udp import SteamistExtendedStatus
 
 
 class SteamistEntity(CoordinatorEntity[SteamistDataUpdateCoordinator], Entity):
@@ -37,6 +38,9 @@ class SteamistEntity(CoordinatorEntity[SteamistDataUpdateCoordinator], Entity):
                 configuration_url=None
                 if entry.data.get(CONF_PROTOCOL) == PROTOCOL_UDP
                 else f"http://{entry.data[CONF_HOST]}",
+                sw_version=coordinator.data.version
+                if isinstance(coordinator.data, SteamistExtendedStatus)
+                else None,
             )
 
     @property
