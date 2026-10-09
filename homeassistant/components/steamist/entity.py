@@ -1,6 +1,6 @@
 """Support for Steamist sensors."""
 
-from aiosteamist import SteamistStatus
+from aiosteamist import SteamistExtendedStatus, SteamistStatus
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_MODEL, CONF_PROTOCOL
@@ -11,7 +11,6 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
-from .udp import SteamistExtendedStatus
 
 
 class SteamistEntity(CoordinatorEntity[SteamistDataUpdateCoordinator], Entity):

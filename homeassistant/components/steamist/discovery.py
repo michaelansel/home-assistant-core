@@ -4,6 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
+from aiosteamist import SteamistUDPStatus, async_discover as async_udp_discover
 from discovery30303 import AIODiscovery30303, Device30303
 
 from homeassistant import config_entries
@@ -14,7 +15,6 @@ from homeassistant.helpers import device_registry as dr, discovery_flow
 from homeassistant.util.network import is_ip_address
 
 from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY, DOMAIN, PROTOCOL_UDP
-from .udp import SteamistUDPStatus, async_discover as async_udp_discover
 
 _LOGGER = logging.getLogger(__name__)
 

@@ -3,18 +3,19 @@
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from aiosteamist import Steamist, SteamistStatus
-from discovery30303 import AIODiscovery30303, Device30303
-
-from homeassistant.components import steamist
-from homeassistant.components.steamist.const import DOMAIN
-from homeassistant.components.steamist.udp import (
+from aiosteamist import (
+    Steamist,
     SteamistExtendedStatus,
+    SteamistStatus,
     SteamistUDP,
     SteamistUDPStatus,
     parse_master_status,
     parse_status,
 )
+from discovery30303 import AIODiscovery30303, Device30303
+
+from homeassistant.components import steamist
+from homeassistant.components.steamist.const import DOMAIN
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant

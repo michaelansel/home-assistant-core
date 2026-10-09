@@ -2,6 +2,8 @@
 
 from typing import override
 
+from aiosteamist import SteamistExtendedStatus, SteamistUDP
+
 from homeassistant.components.select import SelectEntity, SelectEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PROTOCOL
@@ -11,7 +13,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import DOMAIN, PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
 from .entity import SteamistEntity
-from .udp import SteamistExtendedStatus, SteamistUDP
 
 OPTION_OFF = "off"
 PRESET_OPTIONS = {"preset_1": 1, "preset_2": 2}

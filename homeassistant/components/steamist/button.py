@@ -2,6 +2,8 @@
 
 from typing import override
 
+from aiosteamist import Peripheral, SteamistUDP
+
 from homeassistant.components.button import ButtonEntity, ButtonEntityDescription
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_PROTOCOL
@@ -11,7 +13,6 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from .const import DOMAIN, PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
 from .entity import SteamistEntity
-from .udp import Peripheral, SteamistUDP
 
 SHOWER_BUTTONS: tuple[tuple[ButtonEntityDescription, int], ...] = tuple(
     (

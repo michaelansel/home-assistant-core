@@ -4,7 +4,7 @@
 from datetime import timedelta
 from typing import Any
 
-from aiosteamist import Steamist
+from aiosteamist import Steamist, SteamistUDP
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PROTOCOL, Platform
@@ -23,7 +23,6 @@ from .discovery import (
     async_trigger_discovery,
     async_update_entry_from_discovery,
 )
-from .udp import SteamistUDP
 
 PLATFORMS: list[str] = [
     Platform.BUTTON,

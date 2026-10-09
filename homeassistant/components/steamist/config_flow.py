@@ -3,7 +3,7 @@
 import logging
 from typing import Any, Self, override
 
-from aiosteamist import Steamist
+from aiosteamist import Steamist, SteamistUDP
 from discovery30303 import Device30303, normalize_mac
 import probatio
 
@@ -36,7 +36,6 @@ from .discovery import (
     async_is_udp_device,
     async_update_entry_from_discovery,
 )
-from .udp import SteamistUDP
 
 _LOGGER = logging.getLogger(__name__)
 

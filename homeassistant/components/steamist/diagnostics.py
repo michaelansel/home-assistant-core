@@ -3,12 +3,13 @@
 from dataclasses import asdict
 from typing import Any
 
+from aiosteamist import SteamistUDP
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
 from .coordinator import SteamistDataUpdateCoordinator
-from .udp import SteamistUDP
 
 
 async def async_get_config_entry_diagnostics(

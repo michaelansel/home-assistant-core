@@ -4,14 +4,12 @@ from datetime import timedelta
 import logging
 from typing import override
 
-from aiosteamist import Steamist, SteamistStatus
+from aiosteamist import Steamist, SteamistMasterStatus, SteamistStatus, SteamistUDP
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
-
-from .udp import SteamistMasterStatus, SteamistUDP
 
 _LOGGER = logging.getLogger(__name__)
 
