@@ -8,26 +8,47 @@ from discovery30303 import AIODiscovery30303, Device30303
 
 from homeassistant import config_entries
 from homeassistant.components import network
-from homeassistant.const import CONF_MODEL, CONF_NAME
+from homeassistant.const import CONF_MODEL, CONF_NAME, CONF_PROTOCOL
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers import device_registry as dr, discovery_flow
 from homeassistant.util.network import is_ip_address
 
-from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY, DOMAIN
+from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY, DOMAIN, PROTOCOL_UDP
+from .udp import SteamistUDPStatus, async_discover as async_udp_discover
 
 _LOGGER = logging.getLogger(__name__)
 
 
 MODEL_450_HOSTNAME_PREFIX = "MY450-"
 MODEL_550_HOSTNAME_PREFIX = "MY550-"
+# Devices found with the mySteamist "stdisc" command have no hostname,
+# so one is synthesized as STM<version>-<mac>
+UDP_HOSTNAME_PREFIX = "STM"
 
 
 @callback
 def async_is_steamist_device(device: Device30303) -> bool:
     """Check if a 30303 discovery is a steamist device."""
     return device.hostname.startswith(
-        MODEL_450_HOSTNAME_PREFIX
-    ) or device.hostname.startswith(MODEL_550_HOSTNAME_PREFIX)
+        (MODEL_450_HOSTNAME_PREFIX, MODEL_550_HOSTNAME_PREFIX, UDP_HOSTNAME_PREFIX)
+    )
+
+
+@callback
+def async_is_udp_device(device: Device30303) -> bool:
+    """Check if a discovered device only speaks the mySteamist UDP protocol."""
+    return device.hostname.startswith(UDP_HOSTNAME_PREFIX)
+
+
+@callback
+def async_device_from_udp_status(ip: str, status: SteamistUDPStatus) -> Device30303:
+    """Convert a stdisc response to a Device30303."""
+    return Device30303(
+        hostname=f"{UDP_HOSTNAME_PREFIX}{status.version}-{status.mac.replace(':', '')}",
+        mac=status.mac,
+        ipaddress=ip,
+        name=status.name,
+    )
 
 
 @callback
@@ -45,6 +66,8 @@ def async_update_entry_from_discovery(
         updates["title"] = data_updates[CONF_NAME] = device.name
     if not entry.data.get(CONF_MODEL) and "-" in device.hostname:
         data_updates[CONF_MODEL] = device.hostname.split("-", maxsplit=1)[0]
+    if async_is_udp_device(device) and entry.data.get(CONF_PROTOCOL) != PROTOCOL_UDP:
+        data_updates[CONF_PROTOCOL] = PROTOCOL_UDP
     if data_updates:
         updates["data"] = {**entry.data, **data_updates}
     if updates:
@@ -66,29 +89,43 @@ async def async_discover_devices(
             )
         ]
 
+    async def _async_udp_scan() -> list[tuple[str, SteamistUDPStatus]]:
+        try:
+            return await async_udp_discover(targets)
+        except OSError as err:
+            _LOGGER.debug("UDP stdisc scan failed with error: %s", err)
+            return []
+
     scanner = AIODiscovery30303()
-    for idx, discovered in enumerate(
-        await asyncio.gather(
+    udp_results, results = await asyncio.gather(
+        _async_udp_scan(),
+        asyncio.gather(
             *[
                 scanner.async_scan(timeout=timeout, address=target_address)
                 for target_address in targets
             ],
             return_exceptions=True,
-        )
-    ):
+        ),
+    )
+    for idx, discovered in enumerate(results):
         if isinstance(discovered, Exception):
             _LOGGER.debug("Scanning %s failed with error: %s", targets[idx], discovered)
             continue
 
-    _LOGGER.debug("Found devices: %s", scanner.found_devices)
-    if not address:
-        return [
-            device
-            for device in scanner.found_devices
-            if async_is_steamist_device(device)
-        ]
+    found_devices = list(scanner.found_devices)
+    # Prefer the legacy discovery, which means the http api is available
+    known_macs = {dr.format_mac(device.mac) for device in found_devices}
+    found_devices.extend(
+        async_device_from_udp_status(ip, status)
+        for ip, status in udp_results
+        if dr.format_mac(status.mac) not in known_macs
+    )
 
-    return [device for device in scanner.found_devices if device.ipaddress == address]
+    _LOGGER.debug("Found devices: %s", found_devices)
+    if not address:
+        return [device for device in found_devices if async_is_steamist_device(device)]
+
+    return [device for device in found_devices if device.ipaddress == address]
 
 
 @callback

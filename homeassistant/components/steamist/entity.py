@@ -3,12 +3,13 @@
 from aiosteamist import SteamistStatus
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_MODEL
+from homeassistant.const import CONF_HOST, CONF_MODEL, CONF_PROTOCOL
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity, EntityDescription
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
+from .const import PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
 
 
@@ -32,7 +33,10 @@ class SteamistEntity(CoordinatorEntity[SteamistDataUpdateCoordinator], Entity):
                 connections={(dr.CONNECTION_NETWORK_MAC, entry.unique_id)},
                 manufacturer="Steamist",
                 model=entry.data[CONF_MODEL],
-                configuration_url=f"http://{entry.data[CONF_HOST]}",
+                # UDP-only firmwares do not serve a web page
+                configuration_url=None
+                if entry.data.get(CONF_PROTOCOL) == PROTOCOL_UDP
+                else f"http://{entry.data[CONF_HOST]}",
             )
 
     @property

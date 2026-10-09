@@ -1,7 +1,9 @@
 """Test the Steamist config flow."""
 
 from unittest.mock import patch
+from xml.parsers.expat import ExpatError
 
+import aiohttp
 import pytest
 
 from homeassistant import config_entries
@@ -22,6 +24,11 @@ from . import (
     DISCOVERY_30303,
     FORMATTED_MAC_ADDRESS,
     MOCK_ASYNC_GET_STATUS_INACTIVE,
+    UDP_DEVICE_HOSTNAME,
+    UDP_DEVICE_IP_ADDRESS,
+    UDP_ENTRY_DATA,
+    UDP_FORMATTED_MAC_ADDRESS,
+    UDP_STATUS,
     _patch_discovery,
     _patch_status,
 )
@@ -112,9 +119,15 @@ async def test_form_cannot_connect(hass: HomeAssistant) -> None:
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
 
-    with patch(
-        "homeassistant.components.steamist.config_flow.Steamist.async_get_status",
-        side_effect=TimeoutError,
+    with (
+        patch(
+            "homeassistant.components.steamist.config_flow.Steamist.async_get_status",
+            side_effect=TimeoutError,
+        ),
+        patch(
+            "homeassistant.components.steamist.config_flow.SteamistUDP.async_get_udp_status",
+            side_effect=TimeoutError,
+        ),
     ):
         result2 = await hass.config_entries.flow.async_configure(
             result["flow_id"],
@@ -126,6 +139,138 @@ async def test_form_cannot_connect(hass: HomeAssistant) -> None:
     assert result2["type"] is FlowResultType.FORM
     # pylint: disable-next=home-assistant-tests-config-flow-error-recovery
     assert result2["errors"] == {"base": "cannot_connect"}
+
+
+@pytest.mark.parametrize(
+    "http_error", [TimeoutError, aiohttp.ClientError, ExpatError("no element")]
+)
+async def test_form_udp_fallback(hass: HomeAssistant, http_error: Exception) -> None:
+    """Test falling back to the UDP protocol when the http api is missing."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    with (
+        patch(
+            "homeassistant.components.steamist.config_flow.Steamist.async_get_status",
+            side_effect=http_error,
+        ),
+        patch(
+            "homeassistant.components.steamist.config_flow.SteamistUDP.async_get_udp_status",
+            return_value=UDP_STATUS,
+        ),
+        patch(f"{MODULE}.async_setup", return_value=True),
+        patch(f"{MODULE}.async_setup_entry", return_value=True) as mock_setup_entry,
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"host": UDP_DEVICE_IP_ADDRESS}
+        )
+        await hass.async_block_till_done()
+
+    assert result2["type"] is FlowResultType.CREATE_ENTRY
+    assert result2["title"] == "Shower"
+    assert result2["data"] == UDP_ENTRY_DATA
+    assert result2["result"].unique_id == UDP_FORMATTED_MAC_ADDRESS
+    assert len(mock_setup_entry.mock_calls) == 1
+
+
+async def test_form_udp_unknown_exception(hass: HomeAssistant) -> None:
+    """Test an unexpected UDP error after the http api is missing."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+
+    with (
+        patch(
+            "homeassistant.components.steamist.config_flow.Steamist.async_get_status",
+            side_effect=TimeoutError,
+        ),
+        patch(
+            "homeassistant.components.steamist.config_flow.SteamistUDP.async_get_udp_status",
+            side_effect=ValueError,
+        ),
+    ):
+        result2 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"host": UDP_DEVICE_IP_ADDRESS}
+        )
+
+    assert result2["type"] is FlowResultType.FORM
+    assert result2["errors"] == {"base": "unknown"}
+
+    with (
+        patch(
+            "homeassistant.components.steamist.config_flow.Steamist.async_get_status",
+            side_effect=TimeoutError,
+        ),
+        patch(
+            "homeassistant.components.steamist.config_flow.SteamistUDP.async_get_udp_status",
+            return_value=UDP_STATUS,
+        ),
+        patch(f"{MODULE}.async_setup", return_value=True),
+        patch(f"{MODULE}.async_setup_entry", return_value=True),
+    ):
+        result3 = await hass.config_entries.flow.async_configure(
+            result2["flow_id"], {"host": UDP_DEVICE_IP_ADDRESS}
+        )
+        await hass.async_block_till_done()
+
+    assert result3["type"] is FlowResultType.CREATE_ENTRY
+    assert result3["data"] == UDP_ENTRY_DATA
+    assert result3["result"].unique_id == UDP_FORMATTED_MAC_ADDRESS
+
+
+async def test_discovery_udp_device(hass: HomeAssistant) -> None:
+    """Test picking a device found with the mySteamist stdisc command."""
+    udp_devices = [(UDP_DEVICE_IP_ADDRESS, UDP_STATUS)]
+    with _patch_discovery(udp_devices=udp_devices):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN, context={"source": config_entries.SOURCE_USER}
+        )
+        result2 = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+        await hass.async_block_till_done()
+    assert result2["type"] is FlowResultType.FORM
+    assert result2["step_id"] == "pick_device"
+
+    with (
+        _patch_discovery(udp_devices=udp_devices),
+        patch(f"{MODULE}.async_setup", return_value=True),
+        patch(f"{MODULE}.async_setup_entry", return_value=True),
+    ):
+        result3 = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_DEVICE: UDP_FORMATTED_MAC_ADDRESS}
+        )
+        await hass.async_block_till_done()
+
+    assert result3["type"] is FlowResultType.CREATE_ENTRY
+    assert result3["data"] == UDP_ENTRY_DATA
+    assert result3["result"].unique_id == UDP_FORMATTED_MAC_ADDRESS
+
+
+@pytest.mark.usefixtures("mock_aio_discovery")
+async def test_discovered_udp_device_updates_protocol(hass: HomeAssistant) -> None:
+    """Test discovering a UDP device switches an existing http entry to UDP."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        data={CONF_HOST: UDP_DEVICE_IP_ADDRESS, "name": "Shower", "model": "STM550"},
+        unique_id=UDP_FORMATTED_MAC_ADDRESS,
+    )
+    config_entry.add_to_hass(hass)
+    with patch(f"{MODULE}.async_setup_entry", return_value=True):
+        result = await hass.config_entries.flow.async_init(
+            DOMAIN,
+            context={"source": config_entries.SOURCE_INTEGRATION_DISCOVERY},
+            data={
+                "ipaddress": UDP_DEVICE_IP_ADDRESS,
+                "name": "Shower",
+                "mac": UDP_FORMATTED_MAC_ADDRESS,
+                "hostname": UDP_DEVICE_HOSTNAME,
+            },
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "already_configured"
+    assert config_entry.data["protocol"] == "udp"
 
 
 async def test_form_unknown_exception(hass: HomeAssistant) -> None:

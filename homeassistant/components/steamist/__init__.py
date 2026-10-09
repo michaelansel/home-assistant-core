@@ -7,14 +7,14 @@ from typing import Any
 from aiosteamist import Steamist
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, Platform
+from homeassistant.const import CONF_HOST, CONF_PROTOCOL, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.event import async_track_time_interval
 from homeassistant.helpers.typing import ConfigType
 
-from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY, DOMAIN
+from .const import DISCOVER_SCAN_TIMEOUT, DISCOVERY, DOMAIN, PROTOCOL_UDP
 from .coordinator import SteamistDataUpdateCoordinator
 from .discovery import (
     async_discover_device,
@@ -23,6 +23,7 @@ from .discovery import (
     async_trigger_discovery,
     async_update_entry_from_discovery,
 )
+from .udp import SteamistUDP
 
 PLATFORMS: list[str] = [Platform.SENSOR, Platform.SWITCH]
 DISCOVERY_INTERVAL = timedelta(minutes=15)
@@ -49,10 +50,15 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Steamist from a config entry."""
     host = entry.data[CONF_HOST]
+    client: Steamist | SteamistUDP
+    if entry.data.get(CONF_PROTOCOL) == PROTOCOL_UDP:
+        client = SteamistUDP(host)
+    else:
+        client = Steamist(host, async_get_clientsession(hass))
     coordinator = SteamistDataUpdateCoordinator(
         hass,
         entry,
-        Steamist(host, async_get_clientsession(hass)),
+        client,
     )
     await coordinator.async_config_entry_first_refresh()
     if not async_get_discovery(hass, host):

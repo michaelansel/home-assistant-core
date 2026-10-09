@@ -8,6 +8,7 @@ from discovery30303 import AIODiscovery30303, Device30303
 
 from homeassistant.components import steamist
 from homeassistant.components.steamist.const import DOMAIN
+from homeassistant.components.steamist.udp import SteamistUDPStatus, parse_status
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_HOST, CONF_MODEL, CONF_NAME
 from homeassistant.core import HomeAssistant
@@ -51,6 +52,17 @@ DISCOVERY_30303_NOT_STEAMIST = {
     "name": DEVICE_NAME,
     "mac": DEVICE_MAC_ADDRESS,
     "hostname": "not_steamist",
+}
+UDP_DEVICE_IP_ADDRESS = "127.0.0.2"
+UDP_STATUS_RESPONSE = b"STM 550 72F0 00000-D0-CD-02-A2-8AShower"
+UDP_STATUS = parse_status(UDP_STATUS_RESPONSE)
+UDP_FORMATTED_MAC_ADDRESS = "00:d0:cd:02:a2:8a"
+UDP_DEVICE_HOSTNAME = "STM550-00d0cd02a28a"
+UDP_ENTRY_DATA = {
+    CONF_HOST: UDP_DEVICE_IP_ADDRESS,
+    CONF_NAME: "Shower",
+    CONF_MODEL: "STM550",
+    "protocol": "udp",
 }
 DEFAULT_ENTRY_DATA = {
     CONF_HOST: DEVICE_IP_ADDRESS,
@@ -97,19 +109,33 @@ def _patch_status(status: SteamistStatus, client: Steamist | None = None):
     return _patcher()
 
 
-def _patch_discovery(device=None, no_device=False):
+def _patch_discovery(
+    device=None,
+    no_device=False,
+    udp_devices: list[tuple[str, SteamistUDPStatus]] | None = None,
+):
     mock_aio_discovery = MagicMock(auto_spec=AIODiscovery30303)
     if no_device:
         mock_aio_discovery.async_scan = AsyncMock(side_effect=OSError)
     else:
         mock_aio_discovery.async_scan = AsyncMock()
     mock_aio_discovery.found_devices = [] if no_device else [device or DEVICE_30303]
+    if udp_devices is not None:
+        mock_aio_discovery.found_devices = []
 
     @contextmanager
     def _patcher():
-        with patch(
-            "homeassistant.components.steamist.discovery.AIODiscovery30303",
-            return_value=mock_aio_discovery,
+        with (
+            patch(
+                "homeassistant.components.steamist.discovery.AIODiscovery30303",
+                return_value=mock_aio_discovery,
+            ),
+            patch(
+                "homeassistant.components.steamist.discovery.async_udp_discover",
+                AsyncMock(side_effect=OSError)
+                if no_device
+                else AsyncMock(return_value=udp_devices or []),
+            ),
         ):
             yield
 

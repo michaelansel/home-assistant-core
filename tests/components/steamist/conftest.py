@@ -14,3 +14,13 @@ def mock_aio_discovery() -> Generator[MagicMock]:
     ) as mock_aio_discovery:
         mock_aio_discovery.return_value.async_scan = AsyncMock()
         yield mock_aio_discovery
+
+
+@pytest.fixture(autouse=True)
+def mock_udp_discover() -> Generator[AsyncMock]:
+    """Avoid real UDP stdisc broadcasts unless a test patches discovery."""
+    with patch(
+        "homeassistant.components.steamist.discovery.async_udp_discover",
+        AsyncMock(return_value=[]),
+    ) as mock:
+        yield mock

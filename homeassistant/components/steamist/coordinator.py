@@ -11,6 +11,8 @@ from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
+from .udp import SteamistUDP
+
 _LOGGER = logging.getLogger(__name__)
 
 
@@ -23,7 +25,7 @@ class SteamistDataUpdateCoordinator(DataUpdateCoordinator[SteamistStatus]):
         self,
         hass: HomeAssistant,
         config_entry: ConfigEntry,
-        client: Steamist,
+        client: Steamist | SteamistUDP,
     ) -> None:
         """Initialize DataUpdateCoordinator to gather data for specific steamist."""
         self.client = client

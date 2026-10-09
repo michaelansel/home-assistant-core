@@ -8,20 +8,35 @@ from discovery30303 import Device30303, normalize_mac
 import probatio
 
 from homeassistant.config_entries import ConfigEntryState, ConfigFlow, ConfigFlowResult
-from homeassistant.const import CONF_DEVICE, CONF_HOST, CONF_MODEL, CONF_NAME
+from homeassistant.const import (
+    CONF_DEVICE,
+    CONF_HOST,
+    CONF_MODEL,
+    CONF_NAME,
+    CONF_PROTOCOL,
+)
 from homeassistant.core import DOMAIN as HOMEASSISTANT_DOMAIN, callback
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.service_info.dhcp import DhcpServiceInfo
 from homeassistant.helpers.typing import DiscoveryInfoType
 
-from .const import CONNECTION_EXCEPTIONS, DISCOVER_SCAN_TIMEOUT, DOMAIN
+from .const import (
+    CONNECTION_EXCEPTIONS,
+    DISCOVER_SCAN_TIMEOUT,
+    DOMAIN,
+    HTTP_EXCEPTIONS,
+    PROTOCOL_UDP,
+)
 from .discovery import (
+    async_device_from_udp_status,
     async_discover_device,
     async_discover_devices,
     async_is_steamist_device,
+    async_is_udp_device,
     async_update_entry_from_discovery,
 )
+from .udp import SteamistUDP
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -125,6 +140,8 @@ class SteamistConfigFlow(ConfigFlow, domain=DOMAIN):
         data = {CONF_HOST: device.ipaddress, CONF_NAME: device.name}
         if device.hostname:
             data[CONF_MODEL] = device.hostname.split("-", maxsplit=1)[0]
+        if async_is_udp_device(device):
+            data[CONF_PROTOCOL] = PROTOCOL_UDP
         return self.async_create_entry(
             title=device.name,
             data=data,
@@ -177,8 +194,23 @@ class SteamistConfigFlow(ConfigFlow, domain=DOMAIN):
             websession = async_get_clientsession(self.hass)
             try:
                 await Steamist(host, websession).async_get_status()
-            except CONNECTION_EXCEPTIONS:
-                errors["base"] = "cannot_connect"
+            except HTTP_EXCEPTIONS as err:
+                # Newer firmwares only speak the mySteamist UDP protocol
+                _LOGGER.debug("HTTP status from %s failed (%s), trying UDP", host, err)
+                try:
+                    status = await SteamistUDP(host).async_get_udp_status()
+                except CONNECTION_EXCEPTIONS:
+                    errors["base"] = "cannot_connect"
+                except Exception:
+                    _LOGGER.exception("Unexpected exception")
+                    errors["base"] = "unknown"
+                else:
+                    device = async_device_from_udp_status(host, status)
+                    await self.async_set_unique_id(
+                        dr.format_mac(device.mac), raise_on_progress=False
+                    )
+                    self._abort_if_unique_id_configured(updates={CONF_HOST: host})
+                    return self._async_create_entry_from_device(device)
             except Exception:
                 _LOGGER.exception("Unexpected exception")
                 errors["base"] = "unknown"

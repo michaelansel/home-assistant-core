@@ -23,7 +23,12 @@ from . import (
     DEVICE_NAME,
     FORMATTED_MAC_ADDRESS,
     MOCK_ASYNC_GET_STATUS_ACTIVE,
+    UDP_DEVICE_IP_ADDRESS,
+    UDP_ENTRY_DATA,
+    UDP_FORMATTED_MAC_ADDRESS,
     _async_setup_entry_with_status,
+    _mocked_steamist,
+    _patch_discovery,
     _patch_status,
 )
 
@@ -143,3 +148,34 @@ async def test_discovery_happens_at_interval(
         async_fire_time_changed(hass)
         await hass.async_block_till_done(wait_background_tasks=True)
         assert len(mock_aio_discovery.async_scan.mock_calls) == 3
+
+
+@pytest.mark.usefixtures("mock_aio_discovery")
+async def test_setup_udp_entry(
+    hass: HomeAssistant, device_registry: dr.DeviceRegistry
+) -> None:
+    """Test a UDP-only device is set up with the UDP client."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN, data=UDP_ENTRY_DATA, unique_id=UDP_FORMATTED_MAC_ADDRESS
+    )
+    config_entry.add_to_hass(hass)
+    client = _mocked_steamist()
+    with (
+        _patch_discovery(no_device=True),
+        patch(
+            "homeassistant.components.steamist.SteamistUDP", return_value=client
+        ) as mock_udp,
+        patch("homeassistant.components.steamist.Steamist") as mock_http,
+    ):
+        await async_setup_component(hass, steamist.DOMAIN, {steamist.DOMAIN: {}})
+        await hass.async_block_till_done()
+
+    assert config_entry.state is ConfigEntryState.LOADED
+    mock_udp.assert_called_once_with(UDP_DEVICE_IP_ADDRESS)
+    mock_http.assert_not_called()
+    device = device_registry.async_get_device_by_connection(
+        (dr.CONNECTION_NETWORK_MAC, UDP_FORMATTED_MAC_ADDRESS), config_entry.entry_id
+    )
+    assert device is not None
+    assert device.configuration_url is None
+    assert device.model == "STM550"
